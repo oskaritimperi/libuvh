@@ -45,8 +45,10 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf);
 static int on_message_begin(http_parser *parser);
 static int on_url(http_parser *parser, const char *at, size_t len);
 static int on_status(http_parser *parser, const char *at, size_t len);
-static int on_header_field(http_parser *parser, const char *at, size_t len);
-static int on_header_value(http_parser *parser, const char *at, size_t len);
+static int on_header_field(http_parser *parser, const char *at,
+    size_t len);
+static int on_header_value(http_parser *parser, const char *at,
+    size_t len);
 static int on_headers_complete(http_parser *parser);
 static int on_body(http_parser *parser, const char *at, size_t len);
 static int on_message_complete(http_parser *parser);
@@ -117,7 +119,8 @@ error:
 int uvh_server_listen(struct uvh_server *server, const char *address,
     short port)
 {
-    struct uvh_server_private *serverp = container_of(server, struct uvh_server_private, server);
+    struct uvh_server_private *serverp = container_of(server,
+        struct uvh_server_private, server);
     struct sockaddr_in addr = uv_ip4_addr(address, port);
 
     memcpy(&serverp->addr, &addr, sizeof(addr));
@@ -136,7 +139,8 @@ int uvh_server_listen(struct uvh_server *server, const char *address,
 
 static void on_connection(uv_stream_t *stream, int status)
 {
-    struct uvh_server_private *priv = container_of((uv_tcp_t *) stream, struct uvh_server_private, stream);
+    struct uvh_server_private *priv = container_of((uv_tcp_t *) stream,
+        struct uvh_server_private, stream);
 
     LOG_DEBUG("%s", __FUNCTION__);
 
@@ -189,8 +193,12 @@ static uv_buf_t alloc_cb(uv_handle_t *handle, size_t size)
 
 static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
 {
-    struct uvh_request_private *req = (struct uvh_request_private *) stream->data;
-    struct uvh_server_private *serverp = container_of(req->req.server, struct uvh_server_private, server);
+    struct uvh_request_private *req;
+    struct uvh_server_private *serverp;
+
+    req = (struct uvh_request_private *) stream->data;
+    serverp = container_of(req->req.server, struct uvh_server_private,
+        server);
 
     LOG_DEBUG("read_cb: nread: %zd, buf.len: %zd", nread, buf.len);
 
@@ -236,14 +244,16 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
 
 static int on_message_begin(http_parser *parser)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
+    struct uvh_request_private *priv;
+    priv = (struct uvh_request_private *) parser->data;
     priv->req.content = (const char *) sdsempty();
     return 0;
 }
 
 static int on_url(http_parser *parser, const char *at, size_t len)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
+    struct uvh_request_private *priv;
+    priv = (struct uvh_request_private *) parser->data;
 
     LOG_DEBUG("on_url: <%.*s>", (int) len, at);
 
@@ -266,10 +276,14 @@ static int on_status(http_parser *parser, const char *at, size_t len)
     return 0;
 }
 
-static int on_header_field(http_parser *parser, const char *at, size_t len)
+static int on_header_field(http_parser *parser, const char *at,
+    size_t len)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
-    struct uvh_request *req = &priv->req;
+    struct uvh_request_private *priv;
+    struct uvh_request *req;
+
+    priv = (struct uvh_request_private *) parser->data;
+    req = &priv->req;
 
     if (priv->header_state == 0)
     {
@@ -294,9 +308,12 @@ static int on_header_field(http_parser *parser, const char *at, size_t len)
     return 0;
 }
 
-static int on_header_value(http_parser *parser, const char *at, size_t len)
+static int on_header_value(http_parser *parser, const char *at,
+    size_t len)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
+    struct uvh_request_private *priv;
+
+    priv = (struct uvh_request_private *) parser->data;
 
     if (priv->header_state == 1)
     {
@@ -314,10 +331,14 @@ static int on_header_value(http_parser *parser, const char *at, size_t len)
 
 static int on_headers_complete(http_parser *parser)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
-    struct uvh_request *req = &priv->req;
+    struct uvh_request_private *priv;
+    struct uvh_request *req;
     struct http_parser_url url;
-    const char *full = req->url.full;
+    const char *full;
+
+    priv = (struct uvh_request_private *) parser->data;
+    req = &priv->req;
+    full = req->url.full;
 
     if (priv->header_state == 2)
     {
@@ -356,7 +377,8 @@ static int on_headers_complete(http_parser *parser)
 
 static int on_body(http_parser *parser, const char *at, size_t len)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
+    struct uvh_request_private *priv;
+    priv = (struct uvh_request_private *) parser->data;
     priv->req.content = (const char *) sdscatlen((sds) priv->req.content,
         at, len);
     return 0;
@@ -364,7 +386,9 @@ static int on_body(http_parser *parser, const char *at, size_t len)
 
 static int on_message_complete(http_parser *parser)
 {
-    struct uvh_request_private *priv = (struct uvh_request_private *) parser->data;
+    struct uvh_request_private *priv;
+
+    priv = (struct uvh_request_private *) parser->data;
 
     LOG_DEBUG("on_message_complete");
 
@@ -394,14 +418,16 @@ struct uvh_write_request
 
 static void after_request_write(uv_write_t *req, int status)
 {
-    struct uvh_write_request *wreq = container_of(req, struct uvh_write_request, wreq);
+    struct uvh_write_request *wreq = container_of(req, struct uvh_write_request,
+        wreq);
     sdsfree((sds) wreq->buf.base);
     free(wreq);
 }
 
 static void uvh_request_write_sds(struct uvh_request *req, sds data)
 {
-    struct uvh_request_private *p = container_of(req, struct uvh_request_private, req);
+    struct uvh_request_private *p = container_of(req,
+        struct uvh_request_private, req);
     struct uvh_write_request *wreq = calloc(1, sizeof(*wreq));
 
     wreq->buf.base = (char *) data;
