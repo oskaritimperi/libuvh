@@ -106,6 +106,8 @@ struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
 int uvh_server_listen(struct uvh_server *server, const char *address,
     short port);
 
+void uvh_server_stop(struct uvh_server *server);
+
 void uvh_request_write(struct uvh_request *req, const char *data,
     size_t len);
 

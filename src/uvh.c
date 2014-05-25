@@ -64,6 +64,7 @@ struct uvh_server_private
     uv_loop_t *loop;
     struct http_parser_settings http_parser_settings;
     uv_tcp_t stream;
+    char stop;
 };
 
 struct uvh_request_private
@@ -144,6 +145,22 @@ int uvh_server_listen(struct uvh_server *server, const char *address,
     return 0;
 }
 
+static void on_server_close(uv_handle_t *handle)
+{
+    LOG_DEBUG("%s", __FUNCTION__);
+}
+
+void uvh_server_stop(struct uvh_server *server)
+{
+    struct uvh_server_private *p;
+
+    p = container_of(server, struct uvh_server_private, server);
+
+    p->stop = 1;
+
+    uv_close((uv_handle_t *) &p->stream, &on_server_close);
+}
+
 static void on_connection(uv_stream_t *stream, int status)
 {
     struct uvh_server_private *priv = container_of((uv_tcp_t *) stream,
@@ -154,6 +171,16 @@ static void on_connection(uv_stream_t *stream, int status)
     if (status == -1)
     {
         LOG_WARNING("on_connection: status = -1");
+        return;
+    }
+
+    if (priv->stop)
+    {
+        LOG_WARNING("on_connection: stop bit set");
+        uv_tcp_t *client = calloc(1, sizeof(*client));
+        uv_tcp_init(priv->loop, client);
+        uv_accept(stream, (uv_stream_t *) client);
+        uv_close((uv_handle_t *) client, NULL);
         return;
     }
 
