@@ -16,6 +16,9 @@ hello: examples/hello.o libuvh.a
 chunked: examples/chunked.o libuvh.a
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+fileserver: examples/fileserver.o libuvh.a
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 .PHONY: clean
 clean:
 	rm -f src/*.o
