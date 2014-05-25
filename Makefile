@@ -2,7 +2,7 @@ CC = gcc
 LD = gcc
 AR = ar
 
-CFLAGS += -Wall -g -O0
+CFLAGS += -Wall -Wextra -g -O0
 LDFLAGS +=
 CPPFLAGS += -Isrc
 LDLIBS += -luv
