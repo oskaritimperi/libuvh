@@ -13,6 +13,9 @@ libuvh.a: src/uvh.o src/http_parser.o src/sds.o
 hello: examples/hello.o libuvh.a
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+chunked: examples/chunked.o libuvh.a
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 .PHONY: clean
 clean:
 	rm -f src/*.o
