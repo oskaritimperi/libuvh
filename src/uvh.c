@@ -44,6 +44,7 @@ static struct http_status_code_def http_status_code_defs[] =
 static void on_connection(uv_stream_t *stream, int status);
 static uv_buf_t alloc_cb(uv_handle_t *, size_t size);
 static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf);
+static void close_cb(uv_handle_t *handle);
 
 static int on_message_begin(http_parser *parser);
 static int on_url(http_parser *parser, const char *at, size_t len);
@@ -254,7 +255,7 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
                 &serverp->http_parser_settings, NULL, 0);
         }
 
-        uv_close((uv_handle_t *) stream, NULL);
+        uv_close((uv_handle_t *) stream, &close_cb);
 
         return;
     }
@@ -274,10 +275,31 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
     if (nparsed != nread)
     {
         LOG_ERROR("http parse error, closing connection");
-        uv_close((uv_handle_t *) stream, NULL);
+        uv_close((uv_handle_t *) stream, &close_cb);
     }
 
     free(buf.base);
+}
+
+static void close_cb(uv_handle_t *handle)
+{
+    LOG_DEBUG("%s", __FUNCTION__);
+
+    struct uvh_request_private *p;
+
+    p = (struct uvh_request_private *) handle->data;
+
+    sdsfree((sds) p->req.method);
+    sdsfree((sds) p->req.version);
+    sdsfree((sds) p->req.url.full);
+    sdsfree((sds) p->req.url.schema);
+    sdsfree((sds) p->req.url.host);
+    sdsfree((sds) p->req.url.port);
+    sdsfree((sds) p->req.url.path);
+    sdsfree((sds) p->req.url.query);
+    sdsfree((sds) p->req.url.fragment);
+    sdsfree((sds) p->req.url.userinfo);
+    sdsfree((sds) p->req.content);
 }
 
 static int on_message_begin(http_parser *parser)
