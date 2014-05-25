@@ -74,6 +74,10 @@ struct uvh_request_private
     sds header_name;
     sds header_value;
     int header_state;
+    char keepalive;
+    int send_status;
+    sds send_headers;
+    sds send_body;
 };
 
 struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
@@ -156,6 +160,10 @@ static void on_connection(uv_stream_t *stream, int status)
     struct uvh_request_private *req = calloc(1, sizeof(*req));
     req->req.server = &priv->server;
     req->header_state = 0;
+
+    req->send_body = sdsempty();
+    req->send_headers = sdsempty();
+    req->send_status = HTTP_OK;
 
     http_parser_init(&req->parser, HTTP_REQUEST);
     req->parser.data = req;
@@ -395,6 +403,8 @@ static int on_message_complete(http_parser *parser)
 
     LOG_DEBUG("on_message_complete");
 
+    priv->keepalive = http_should_keep_alive(parser);
+
     if (priv->req.content)
         priv->req.content_length = sdslen((sds) priv->req.content);
     else
@@ -431,6 +441,7 @@ static void uvh_request_write_sds(struct uvh_request *req, sds data)
 {
     struct uvh_request_private *p = container_of(req,
         struct uvh_request_private, req);
+
     struct uvh_write_request *wreq = calloc(1, sizeof(*wreq));
 
     wreq->buf.base = (char *) data;
@@ -445,11 +456,17 @@ static void uvh_request_write_sds(struct uvh_request *req, sds data)
 void uvh_request_write(struct uvh_request *req,
     const char *data, size_t len)
 {
-    uvh_request_write_sds(req, sdsnewlen(data, len));
+    struct uvh_request_private *p = container_of(req,
+        struct uvh_request_private, req);
+
+    p->send_body = sdscatlen(p->send_body, data, len);
 }
 
 void uvh_request_writef(struct uvh_request *req, const char *fmt, ...)
 {
+    struct uvh_request_private *p = container_of(req,
+        struct uvh_request_private, req);
+
     va_list ap;
     sds result;
 
@@ -457,19 +474,25 @@ void uvh_request_writef(struct uvh_request *req, const char *fmt, ...)
     result = sdscatvprintf(sdsempty(), fmt, ap);
     va_end(ap);
 
-    uvh_request_write_sds(req, result);
+    p->send_body = sdscatsds(p->send_body, result);
+    sdsfree(result);
 }
 
 void uvh_request_write_status(struct uvh_request *req, int status)
 {
-    uvh_request_writef(req, "%s %d %s\r\n", req->version, status,
-        http_status_code_str(status));
+    struct uvh_request_private *p = container_of(req,
+        struct uvh_request_private, req);
+
+    p->send_status = status;
 }
 
 void uvh_request_write_header(struct uvh_request *req,
     const char *name, const char *value)
 {
-    uvh_request_writef(req, "%s: %s\r\n", name, value);
+    struct uvh_request_private *p = container_of(req,
+        struct uvh_request_private, req);
+
+    p->send_headers = sdscatprintf(p->send_headers, "%s: %s\r\n", name, value);
 }
 
 const char *http_status_code_str(int code)
@@ -499,4 +522,32 @@ const char *uvh_request_get_header(struct uvh_request *req,
     }
 
     return NULL;
+}
+
+void uvh_request_end(struct uvh_request *req)
+{
+    LOG_DEBUG("%s", __FUNCTION__);
+
+    struct uvh_request_private *p = container_of(req,
+        struct uvh_request_private, req);
+
+    uvh_request_write_sds(req, sdscatprintf(sdsempty(),
+        "%s %d %s\r\n", p->req.version, p->send_status,
+        http_status_code_str(p->send_status)));
+
+    sds content_len = sdscatprintf(sdsempty(), "%d", (int)sdslen(p->send_body));
+    uvh_request_write_header(req, "Content-Length", content_len);
+    sdsfree(content_len);
+
+    LOG_DEBUG("keepalive: %d", p->keepalive);
+
+    if (!p->keepalive)
+    {
+        uvh_request_write_header(req, "Connection", "close");
+        // uv_close at some point?
+    }
+
+    uvh_request_write_sds(req, p->send_headers);
+    uvh_request_write_sds(req, sdsnew("\r\n"));
+    uvh_request_write_sds(req, p->send_body);
 }

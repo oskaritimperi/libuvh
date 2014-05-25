@@ -126,4 +126,6 @@ const char *http_status_code_str(int code);
 const char *uvh_request_get_header(struct uvh_request *req,
     const char *name);
 
+void uvh_request_end(struct uvh_request *req);
+
 #endif /* UVH_H */
