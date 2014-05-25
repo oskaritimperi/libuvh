@@ -168,6 +168,69 @@ void uvh_server_stop(struct uvh_server *server)
     uv_close((uv_handle_t *) &p->stream, &on_server_close);
 }
 
+void request_init(struct uvh_request_private *req, struct uvh_server *server)
+{
+    if (req->req.header_count > 0)
+    {
+        int i;
+        for (i = 0; i < req->req.header_count; ++i)
+        {
+            sdsfree((sds) req->req.headers[i].name);
+            sdsfree((sds) req->req.headers[i].value);
+        }
+
+        if (req->req.method)
+            sdsfree((sds) req->req.method);
+
+        if (req->req.version)
+            sdsfree((sds) req->req.version);
+
+        if (req->req.url.full)
+            sdsfree((sds) req->req.url.full);
+
+        if (req->req.url.schema)
+            sdsfree((sds) req->req.url.schema);
+
+        if (req->req.url.host)
+            sdsfree((sds) req->req.url.host);
+
+        if (req->req.url.port)
+            sdsfree((sds) req->req.url.port);
+
+        if (req->req.url.path)
+            sdsfree((sds) req->req.url.path);
+
+        if (req->req.url.query)
+            sdsfree((sds) req->req.url.query);
+
+        if (req->req.url.fragment)
+            sdsfree((sds) req->req.url.fragment);
+
+        if (req->req.url.userinfo)
+            sdsfree((sds) req->req.url.userinfo);
+
+        if (req->req.content)
+            sdsfree((sds) req->req.content);
+    }
+
+    memset(&req->req, 0, sizeof(req->req));
+
+    req->req.server = server;
+
+    req->header_state = 0;
+
+    req->send_body = sdsempty();
+    req->send_headers = sdsempty();
+    req->send_status = HTTP_OK;
+
+    http_parser_init(&req->parser, HTTP_REQUEST);
+    req->parser.data = req;
+
+    req->streaming = 0;
+    req->stream_cb = NULL;
+    req->stream_userdata = NULL;
+}
+
 static void on_connection(uv_stream_t *stream, int status)
 {
     struct uvh_server_private *priv = container_of((uv_tcp_t *) stream,
@@ -192,15 +255,7 @@ static void on_connection(uv_stream_t *stream, int status)
     }
 
     struct uvh_request_private *req = calloc(1, sizeof(*req));
-    req->req.server = &priv->server;
-    req->header_state = 0;
-
-    req->send_body = sdsempty();
-    req->send_headers = sdsempty();
-    req->send_status = HTTP_OK;
-
-    http_parser_init(&req->parser, HTTP_REQUEST);
-    req->parser.data = req;
+    request_init(req, &priv->server);
 
     if (uv_tcp_init(priv->loop, &req->stream))
     {
@@ -226,6 +281,8 @@ error:
 
     if (req)
     {
+        sdsfree(req->send_body);
+        sdsfree(req->send_headers);
         free(req);
     }
 }
@@ -626,6 +683,11 @@ void uvh_request_end(struct uvh_request *req)
 
     if (!p->streaming)
         uvh_request_write_sds(req, p->send_body, &after_request_write);
+
+    if (p->keepalive)
+    {
+        request_init(p, req->server);
+    }
 }
 
 static void after_last_chunk_write(uv_write_t *req, int status)
