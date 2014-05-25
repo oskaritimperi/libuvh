@@ -57,8 +57,7 @@ static int on_headers_complete(http_parser *parser);
 static int on_body(http_parser *parser, const char *at, size_t len);
 static int on_message_complete(http_parser *parser);
 
-static void uvh_request_write_chunk(struct uvh_request *req, sds chunk,
-    uv_write_cb cb);
+static void uvh_request_write_chunk(struct uvh_request *req, sds chunk);
 
 struct uvh_server_private
 {
@@ -575,7 +574,7 @@ void uvh_request_write(struct uvh_request *req,
 
     if (p->streaming)
     {
-        uvh_request_write_chunk(req, sdsnewlen(data, len), NULL);
+        uvh_request_write_chunk(req, sdsnewlen(data, len));
     }
     else
         p->send_body = sdscatlen(p->send_body, data, len);
@@ -595,7 +594,7 @@ void uvh_request_writef(struct uvh_request *req, const char *fmt, ...)
 
     if (p->streaming)
     {
-        uvh_request_write_chunk(req, result, NULL);
+        uvh_request_write_chunk(req, result);
     }
     else
         p->send_body = sdscatsds(p->send_body, result);
@@ -684,7 +683,7 @@ void uvh_request_end(struct uvh_request *req)
     if (!p->streaming)
         uvh_request_write_sds(req, p->send_body, &after_request_write);
 
-    if (p->keepalive)
+    if (p->keepalive && !p->streaming)
     {
         request_init(p, req->server);
     }
@@ -693,8 +692,13 @@ void uvh_request_end(struct uvh_request *req)
 static void after_last_chunk_write(uv_write_t *req, int status)
 {
     LOG_DEBUG("%s", __FUNCTION__);
-    (void)req;
+
+    struct uvh_write_request *wreq = container_of(req, struct uvh_write_request,
+        wreq);
+
     (void)status;
+
+    request_init(wreq->req, wreq->req->req.server);
 }
 
 static void after_chunk_write(uv_write_t *req, int status)
@@ -708,24 +712,25 @@ static void after_chunk_write(uv_write_t *req, int status)
 
     struct uvh_request_private *p = wreq->req;
 
-    char *chunk;
-
-    int chunklen = p->stream_cb(&chunk, p->stream_userdata);
-
-    if (chunklen == 0)
+    if (p->stream_cb)
     {
-        uvh_request_write_chunk(&p->req, sdsempty(), &after_last_chunk_write);
-    }
-    else
-    {
-        uvh_request_write_chunk(&p->req, sdsnewlen(chunk, chunklen),
-            &after_chunk_write);
-        free(chunk);
+        char *chunk;
+
+        int chunklen = p->stream_cb(&chunk, p->stream_userdata);
+
+        if (chunklen == 0)
+        {
+            uvh_request_write_chunk(&p->req, sdsempty());
+        }
+        else
+        {
+            uvh_request_write_chunk(&p->req, sdsnewlen(chunk, chunklen));
+            free(chunk);
+        }
     }
 }
 
-static void uvh_request_write_chunk(struct uvh_request *req, sds chunk,
-    uv_write_cb cb)
+static void uvh_request_write_chunk(struct uvh_request *req, sds chunk)
 {
     LOG_DEBUG("%s len:%d", __FUNCTION__, (int) sdslen(chunk));
 
@@ -734,12 +739,19 @@ static void uvh_request_write_chunk(struct uvh_request *req, sds chunk,
 
     uvh_request_write_sds(req, chunklen, NULL);
 
+    uv_write_cb callback;
+
     if (sdslen(chunk) > 0)
     {
         uvh_request_write_sds(req, chunk, NULL);
+        callback = &after_chunk_write;
+    }
+    else
+    {
+        callback = &after_last_chunk_write;
     }
 
-    uvh_request_write_sds(req, sdsnew("\r\n"), cb);
+    uvh_request_write_sds(req, sdsnew("\r\n"), callback);
 }
 
 void uvh_request_stream(struct uvh_request *req, uvh_stream_cb callback,
@@ -760,8 +772,7 @@ void uvh_request_stream(struct uvh_request *req, uvh_stream_cb callback,
     {
         char *chunk;
         int chunklen = callback(&chunk, data);
-        uvh_request_write_chunk(req, sdsnewlen(chunk, chunklen),
-            &after_chunk_write);
+        uvh_request_write_chunk(req, sdsnewlen(chunk, chunklen));
         free(chunk);
     }
 }
