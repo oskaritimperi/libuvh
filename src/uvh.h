@@ -103,6 +103,8 @@ struct uvh_request
 struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
     uvh_request_handler_cb request_handler);
 
+void uvh_server_free(struct uvh_server *server);
+
 int uvh_server_listen(struct uvh_server *server, const char *address,
     short port);
 
