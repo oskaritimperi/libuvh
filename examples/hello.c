@@ -25,15 +25,23 @@ int request_handler(struct uvh_request *req)
     printf("request content length: %d\n", req->content_length);
 
     uvh_request_write_status(req, 418);
-    uvh_request_write_header(req, "Content-Length", "7");
     uvh_request_write_header(req, "X-FOOBAR", "whee");
-    uvh_request_write_header(req, "Connection", "close");
-    uvh_request_write(req, "\r\nfoobar\n", 9);
+    uvh_request_write(req, "foobar\n", 7);
+    uvh_request_end(req);
     return 0;
+}
+
+void ctrlc_handler(uv_signal_t *handle, int signum)
+{
+    struct uvh_server *server = handle->data;
+    uvh_server_stop(server);
+    uv_close((uv_handle_t *) handle, NULL);
+    (void) signum;
 }
 
 int main()
 {
+    uv_signal_t sig;
     struct uvh_server *server = uvh_server_init(uv_default_loop(),
         NULL, &request_handler);
 
@@ -43,7 +51,13 @@ int main()
     if (uvh_server_listen(server, "127.0.0.1", 9898))
         goto error;
 
+    uv_signal_init(uv_default_loop(), &sig);
+    sig.data = server;
+    uv_signal_start(&sig, &ctrlc_handler, SIGINT);
+
     uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+
+    printf("done\n");
 
     return 0;
 
