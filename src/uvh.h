@@ -130,4 +130,9 @@ const char *uvh_request_get_header(struct uvh_request *req,
 
 void uvh_request_end(struct uvh_request *req);
 
+typedef int (*uvh_stream_cb)(char **buffer, void *data);
+
+void uvh_request_stream(struct uvh_request *req, uvh_stream_cb callback,
+    void *data);
+
 #endif /* UVH_H */
