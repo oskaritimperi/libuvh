@@ -47,7 +47,7 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf);
 
 static int on_message_begin(http_parser *parser);
 static int on_url(http_parser *parser, const char *at, size_t len);
-static int on_status(http_parser *parser, const char *at, size_t len);
+// static int on_status(http_parser *parser, const char *at, size_t len);
 static int on_header_field(http_parser *parser, const char *at,
     size_t len);
 static int on_header_value(http_parser *parser, const char *at,
@@ -100,7 +100,7 @@ struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
 
     server->http_parser_settings.on_message_begin = on_message_begin;
     server->http_parser_settings.on_url = on_url;
-    server->http_parser_settings.on_status = on_status;
+    // server->http_parser_settings.on_status = on_status;
     server->http_parser_settings.on_header_field = on_header_field;
     server->http_parser_settings.on_header_value = on_header_value;
     server->http_parser_settings.on_headers_complete = on_headers_complete;
@@ -273,11 +273,11 @@ static int on_url(http_parser *parser, const char *at, size_t len)
     return 0;
 }
 
-static int on_status(http_parser *parser, const char *at, size_t len)
-{
-    LOG_DEBUG("on_status: <%.*s>", (int) len, at);
-    return 0;
-}
+// static int on_status(http_parser *parser, const char *at, size_t len)
+// {
+//     LOG_DEBUG("on_status: <%.*s>", (int) len, at);
+//     return 0;
+// }
 
 static int on_header_field(http_parser *parser, const char *at,
     size_t len)
