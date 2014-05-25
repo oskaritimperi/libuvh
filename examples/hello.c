@@ -59,6 +59,8 @@ int main()
 
     printf("done\n");
 
+    uvh_server_free(server);
+
     return 0;
 
 error:

@@ -71,6 +71,12 @@ void on_readdir(uv_fs_t *req)
     uvh_request_writef(dirreq->req, "%s", "</ul></body></html>");
 
     uvh_request_end(dirreq->req);
+
+    uv_fs_req_cleanup(req);
+
+    sdsfree(dirreq->real_path);
+    sdsfree(dirreq->req_path);
+    free(dirreq);
 }
 
 void handle_dir(struct uvh_request *req, sds req_path, sds real_path)
@@ -95,29 +101,26 @@ void on_read(uv_fs_t *req)
 
     printf("on_read: result: %d\n", (int)req->result);
 
-    if (req->result == 0)
-    {
-        // eof
-        uv_fs_t close_req;
-        uv_fs_close(req->loop, &close_req, chunker->open_req.result, NULL);
-
-        uvh_request_write(chunker->req, NULL, 0);
-    }
-    else if (req->result < 0)
-    {
-        // error
-        uv_fs_t close_req;
-        uv_fs_close(req->loop, &close_req, chunker->open_req.result, NULL);
-
-        uvh_request_write(chunker->req, NULL, 0);
-    }
-    else
+    if (req->result > 0)
     {
         uvh_request_write(chunker->req, chunker->buffer, req->result);
 
         uv_fs_read(req->loop, &chunker->read_req, chunker->open_req.result,
             chunker->buffer, MAX_CHUNK, -1, &on_read);
+
+        return;
     }
+
+    // error or eof
+
+    uv_fs_t close_req;
+    uv_fs_close(req->loop, &close_req, chunker->open_req.result, NULL);
+
+    uvh_request_write(chunker->req, NULL, 0);
+
+    sdsfree(chunker->req_path);
+    sdsfree(chunker->real_path);
+    free(chunker);
 }
 
 void on_open(uv_fs_t *req)
@@ -129,6 +132,8 @@ void on_open(uv_fs_t *req)
         fprintf(stderr, "error opening: %s\n", chunker->real_path);
         uvh_request_write_status(chunker->req, HTTP_INTERNAL_SERVER_ERROR);
         uvh_request_end(chunker->req);
+        sdsfree(chunker->req_path);
+        sdsfree(chunker->real_path);
         free(chunker);
     }
     else
@@ -187,6 +192,8 @@ int request_handler(struct uvh_request *req)
     }
     else
     {
+        sdsfree(real_path);
+        sdsfree(req_path);
         uvh_request_write_status(req, HTTP_NOT_FOUND);
         uvh_request_end(req);
     }
@@ -237,6 +244,9 @@ int main(int argc, char **argv)
     uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
     printf("done\n");
+
+    uvh_server_free(server);
+    sdsfree(fileserver.root);
 
     return 0;
 

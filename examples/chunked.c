@@ -45,7 +45,7 @@ int request_handler(struct uvh_request *req)
     {
         uvh_request_write_status(req, HTTP_NOT_FOUND);
         uvh_request_end(req);
-        return;
+        return 0;
     }
 
     struct chunker *chunker = calloc(1, sizeof(*chunker));
@@ -83,6 +83,8 @@ int main()
     uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
     printf("done\n");
+
+    uvh_server_free(server);
 
     return 0;
 
