@@ -7,6 +7,11 @@ LDFLAGS +=
 CPPFLAGS += -Isrc
 LDLIBS += -luv
 
+all: libuvh.a examples
+
+.PHONY: examples
+examples: hello chunked fileserver
+
 libuvh.a: src/uvh.o src/http_parser.o src/sds.o
 	$(AR) rcs $@ $^
 
@@ -25,3 +30,5 @@ clean:
 	rm -f examples/*.o
 	rm -f libuvh.a
 	rm -f hello
+	rm -f chunked
+	rm -f fileserver
