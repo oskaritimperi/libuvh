@@ -7,6 +7,13 @@ LDFLAGS +=
 CPPFLAGS += -Isrc
 LDLIBS += -luv
 
+PLATFORM = $(shell uname -s | tr [A-Z] [a-z])
+
+ifeq ($(findstring mingw32,$(PLATFORM)),mingw32)
+LDLIBS += -lws2_32 -lpsapi -liphlpapi
+else
+endif
+
 all: libuvh.a examples
 
 .PHONY: examples

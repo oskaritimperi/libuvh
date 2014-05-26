@@ -308,7 +308,7 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
     serverp = container_of(req->req.server, struct uvh_server_private,
         server);
 
-    LOG_DEBUG("read_cb: nread: %zd, buf.len: %zd", nread, buf.len);
+    LOG_DEBUG("read_cb: nread: %d, buf.len: %d", (int)nread, (int)buf.len);
 
     if (nread < 0)
     {

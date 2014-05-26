@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include "../src/sds.h"
 
-#define MAX_PATH 512
+#include <fcntl.h>
+
 #define MAX_CHUNK 1024
 
 struct fileserver
