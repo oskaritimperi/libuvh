@@ -1,0 +1,10 @@
+# libuvh
+
+A simple http server using libuv for eventloop, and http-parser for doing the
+protocol.
+
+To build, you need libuv. Once that is in order, build libuvh:
+
+    $ export CPPFLAGS=-I/path/to/libuv/includes
+    $ export LDFLAGS=-L/path/to/libuv/libraries
+    $ make all
