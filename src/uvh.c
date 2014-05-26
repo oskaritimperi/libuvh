@@ -87,7 +87,7 @@ struct uvh_request_private
     void *stream_userdata;
 };
 
-struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
+UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
     uvh_request_handler_cb request_handler)
 {
     struct uvh_server_private *server;
@@ -130,14 +130,14 @@ error:
     return NULL;
 }
 
-void uvh_server_free(struct uvh_server *server)
+UVH_EXTERN void uvh_server_free(struct uvh_server *server)
 {
     struct uvh_server_private *p = container_of(server,
         struct uvh_server_private, server);
     free(p);
 }
 
-int uvh_server_listen(struct uvh_server *server, const char *address,
+UVH_EXTERN int uvh_server_listen(struct uvh_server *server, const char *address,
     short port)
 {
     struct uvh_server_private *serverp = container_of(server,
@@ -163,7 +163,7 @@ static void on_server_close(uv_handle_t *handle)
     LOG_DEBUG("%s", __FUNCTION__);
 }
 
-void uvh_server_stop(struct uvh_server *server)
+UVH_EXTERN void uvh_server_stop(struct uvh_server *server)
 {
     struct uvh_server_private *p;
 
@@ -582,7 +582,7 @@ static void uvh_request_write_sds(struct uvh_request *req, sds data,
     uv_write(&wreq->wreq, (uv_stream_t *) &p->stream, &wreq->buf, 1, cb);
 }
 
-void uvh_request_write(struct uvh_request *req,
+UVH_EXTERN void uvh_request_write(struct uvh_request *req,
     const char *data, size_t len)
 {
     struct uvh_request_private *p = container_of(req,
@@ -596,7 +596,8 @@ void uvh_request_write(struct uvh_request *req,
         p->send_body = sdscatlen(p->send_body, data, len);
 }
 
-void uvh_request_writef(struct uvh_request *req, const char *fmt, ...)
+UVH_EXTERN void uvh_request_writef(struct uvh_request *req, const char *fmt,
+    ...)
 {
     struct uvh_request_private *p = container_of(req,
         struct uvh_request_private, req);
@@ -618,7 +619,7 @@ void uvh_request_writef(struct uvh_request *req, const char *fmt, ...)
     sdsfree(result);
 }
 
-void uvh_request_write_status(struct uvh_request *req, int status)
+UVH_EXTERN void uvh_request_write_status(struct uvh_request *req, int status)
 {
     struct uvh_request_private *p = container_of(req,
         struct uvh_request_private, req);
@@ -626,7 +627,7 @@ void uvh_request_write_status(struct uvh_request *req, int status)
     p->send_status = status;
 }
 
-void uvh_request_write_header(struct uvh_request *req,
+UVH_EXTERN void uvh_request_write_header(struct uvh_request *req,
     const char *name, const char *value)
 {
     struct uvh_request_private *p = container_of(req,
@@ -638,7 +639,7 @@ void uvh_request_write_header(struct uvh_request *req,
     p->send_headers = sdscatprintf(p->send_headers, "%s: %s\r\n", name, value);
 }
 
-const char *http_status_code_str(int code)
+UVH_EXTERN const char *http_status_code_str(int code)
 {
     struct http_status_code_def *def = http_status_code_defs;
     while (def->code != -1)
@@ -653,7 +654,7 @@ const char *http_status_code_str(int code)
     return NULL;
 }
 
-const char *uvh_request_get_header(struct uvh_request *req,
+UVH_EXTERN const char *uvh_request_get_header(struct uvh_request *req,
     const char *name)
 {
     int i;
@@ -667,7 +668,7 @@ const char *uvh_request_get_header(struct uvh_request *req,
     return NULL;
 }
 
-void uvh_request_end(struct uvh_request *req)
+UVH_EXTERN void uvh_request_end(struct uvh_request *req)
 {
     LOG_DEBUG("%s", __FUNCTION__);
 
@@ -780,7 +781,7 @@ static void uvh_request_write_chunk(struct uvh_request *req, sds chunk)
     uvh_request_write_sds(req, sdsnew("\r\n"), callback);
 }
 
-void uvh_request_stream(struct uvh_request *req, uvh_stream_cb callback,
+UVH_EXTERN void uvh_request_stream(struct uvh_request *req, uvh_stream_cb cb,
     void *data)
 {
     struct uvh_request_private *p = container_of(req,
@@ -789,15 +790,15 @@ void uvh_request_stream(struct uvh_request *req, uvh_stream_cb callback,
     uvh_request_write_header(req, "Transfer-Encoding", "chunked");
 
     p->streaming = 1;
-    p->stream_cb = callback;
+    p->stream_cb = cb;
     p->stream_userdata = data;
 
     uvh_request_end(req);
 
-    if (callback)
+    if (cb)
     {
         char *chunk;
-        int chunklen = callback(&chunk, data);
+        int chunklen = cb(&chunk, data);
         uvh_request_write_chunk(req, sdsnewlen(chunk, chunklen));
         free(chunk);
     }

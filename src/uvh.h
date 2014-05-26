@@ -1,13 +1,37 @@
 #ifndef UVH_H
 #define UVH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 #include <uv.h>
 
+#ifdef _WIN32
+  /* Windows - set up dll import/export decorators. */
+# if defined(BUILDING_UVH_SHARED)
+    /* Building shared library. */
+#   define UVH_EXTERN __declspec(dllexport)
+# elif defined(USING_UVH_SHARED)
+    /* Using shared library. */
+#   define UVH_EXTERN __declspec(dllimport)
+# else
+    /* Building static library. */
+#   define UVH_EXTERN /* nothing */
+# endif
+#elif __GNUC__ >= 4
+# define UVH_EXTERN __attribute__((visibility("default")))
+#else
+# define UVH_EXTERN /* nothing */
+#endif
+
+#ifndef UVH_MAX_HEADERS
 #define UVH_MAX_HEADERS 50
+#endif
 
 #define HTTP_STATUS_CODE_MAP(XX) \
     XX(100, CONTINUE, "Continue") \
@@ -100,41 +124,46 @@ struct uvh_request
     int content_length;
 };
 
-struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
+UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
     uvh_request_handler_cb request_handler);
 
-void uvh_server_free(struct uvh_server *server);
+UVH_EXTERN void uvh_server_free(struct uvh_server *server);
 
-int uvh_server_listen(struct uvh_server *server, const char *address,
+UVH_EXTERN int uvh_server_listen(struct uvh_server *server, const char *address,
     short port);
 
-void uvh_server_stop(struct uvh_server *server);
+UVH_EXTERN void uvh_server_stop(struct uvh_server *server);
 
-void uvh_request_write(struct uvh_request *req, const char *data,
+UVH_EXTERN void uvh_request_write(struct uvh_request *req, const char *data,
     size_t len);
 
 #ifdef __GNUC__
-void uvh_request_writef(struct uvh_request *req, const char *fmt, ...)
-    __attribute__((format(printf, 2, 3)));
+UVH_EXTERN void uvh_request_writef(struct uvh_request *req, const char *fmt,
+    ...) __attribute__((format(printf, 2, 3)));
 #else
-void uvh_request_writef(struct uvh_request *req, const char *fmt, ...);
+UVH_EXTERN void uvh_request_writef(struct uvh_request *req, const char *fmt,
+    ...);
 #endif
 
-void uvh_request_write_status(struct uvh_request *req, int status);
+UVH_EXTERN void uvh_request_write_status(struct uvh_request *req, int status);
 
-void uvh_request_write_header(struct uvh_request *req,
+UVH_EXTERN void uvh_request_write_header(struct uvh_request *req,
     const char *name, const char *value);
 
-const char *http_status_code_str(int code);
+UVH_EXTERN const char *http_status_code_str(int code);
 
-const char *uvh_request_get_header(struct uvh_request *req,
+UVH_EXTERN const char *uvh_request_get_header(struct uvh_request *req,
     const char *name);
 
-void uvh_request_end(struct uvh_request *req);
+UVH_EXTERN void uvh_request_end(struct uvh_request *req);
 
 typedef int (*uvh_stream_cb)(char **buffer, void *data);
 
-void uvh_request_stream(struct uvh_request *req, uvh_stream_cb callback,
-    void *data);
+UVH_EXTERN void uvh_request_stream(struct uvh_request *req,
+    uvh_stream_cb callback, void *data);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* UVH_H */
