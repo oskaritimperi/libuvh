@@ -17,6 +17,7 @@ LDLIBS += -lws2_32 -lpsapi -liphlpapi
 SHAREDNAME = libuvh.dll
 else
 SHAREDNAME = libuvh.so
+SH_CFLAGS += -fPIC
 endif
 
 SOURCES = uvh.c http_parser.c sds.c
