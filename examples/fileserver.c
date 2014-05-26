@@ -139,6 +139,8 @@ void on_open(uv_fs_t *req)
     }
     else
     {
+        // Pass NULL as callback, so we can write chunks when we want to.
+        // The request is done when an empty chunk is written.
         uvh_request_stream(chunker->req, NULL, NULL);
 
         uv_fs_read(req->loop, &chunker->read_req, req->result, chunker->buffer,
