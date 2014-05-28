@@ -84,14 +84,9 @@ enum
 };
 
 struct uvh_request;
+struct uvh_server;
 
 typedef int (*uvh_request_handler_cb)(struct uvh_request *);
-
-struct uvh_server
-{
-    void *data;
-    uvh_request_handler_cb request_handler;
-};
 
 struct uvh_request
 {
@@ -122,6 +117,8 @@ struct uvh_request
 
     const char *content;
     int content_length;
+
+    void *data;
 };
 
 UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,

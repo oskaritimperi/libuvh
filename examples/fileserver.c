@@ -84,7 +84,7 @@ void handle_dir(struct uvh_request *req, sds req_path, sds real_path)
 {
     struct dirreq *dirreq = calloc(1, sizeof(*dirreq));
 
-    dirreq->fileserver = (struct fileserver *) req->server->data;
+    dirreq->fileserver = (struct fileserver *) req->data;
     dirreq->req = req;
     dirreq->readdir_req.data = dirreq;
     dirreq->real_path = real_path;
@@ -158,7 +158,7 @@ void handle_file(struct uvh_request *req, sds req_path, sds real_path)
     chunker->real_path = real_path;
     chunker->req_path = req_path;
     chunker->req = req;
-    chunker->fileserver = (struct fileserver *) req->server->data;
+    chunker->fileserver = (struct fileserver *) req->data;
 
     uv_fs_open(uv_default_loop(), &chunker->open_req, chunker->real_path,
         O_RDONLY, 0, &on_open);
@@ -172,7 +172,7 @@ int request_handler(struct uvh_request *req)
     sds real_path;
     sds req_path;
 
-    fileserver = (struct fileserver *) req->server->data;
+    fileserver = (struct fileserver *) req->data;
 
     req_path = sdsnew(req->url.path);
     sds req_path2 = sdsnew(req_path+1);

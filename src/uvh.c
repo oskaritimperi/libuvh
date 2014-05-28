@@ -59,15 +59,16 @@ static int on_message_complete(http_parser *parser);
 
 static void uvh_request_write_chunk(struct uvh_request *req, sds chunk);
 
-struct uvh_server_private
+struct uvh_server
 {
-    struct uvh_server server;
     struct sockaddr_storage addr;
     socklen_t addr_len;
     uv_loop_t *loop;
     struct http_parser_settings http_parser_settings;
     uv_tcp_t stream;
     char stop;
+    uvh_request_handler_cb request_handler;
+    void *userdata;
 };
 
 struct uvh_request_private
@@ -90,7 +91,7 @@ struct uvh_request_private
 UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
     uvh_request_handler_cb request_handler)
 {
-    struct uvh_server_private *server;
+    struct uvh_server *server;
     int rc;
 
     server = calloc(1, sizeof(*server));
@@ -99,8 +100,8 @@ UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
         goto error;
 
     server->loop = loop;
-    server->server.data = data;
-    server->server.request_handler = request_handler;
+    server->userdata = data;
+    server->request_handler = request_handler;
 
     rc = uv_tcp_init(loop, &server->stream);
 
@@ -118,7 +119,7 @@ UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
     server->http_parser_settings.on_body = on_body;
     server->http_parser_settings.on_message_complete = on_message_complete;
 
-    return &server->server;
+    return server;
 
 error:
 
@@ -132,24 +133,20 @@ error:
 
 UVH_EXTERN void uvh_server_free(struct uvh_server *server)
 {
-    struct uvh_server_private *p = container_of(server,
-        struct uvh_server_private, server);
-    free(p);
+    free(server);
 }
 
 UVH_EXTERN int uvh_server_listen(struct uvh_server *server, const char *address,
     short port)
 {
-    struct uvh_server_private *serverp = container_of(server,
-        struct uvh_server_private, server);
     struct sockaddr_in addr = uv_ip4_addr(address, port);
 
-    memcpy(&serverp->addr, &addr, sizeof(addr));
-    serverp->addr_len = sizeof(addr);
+    memcpy(&server->addr, &addr, sizeof(addr));
+    server->addr_len = sizeof(addr);
 
-    uv_tcp_bind(&serverp->stream, addr);
+    uv_tcp_bind(&server->stream, addr);
 
-    int r = uv_listen((uv_stream_t *) &serverp->stream, 128,
+    int r = uv_listen((uv_stream_t *) &server->stream, 128,
         on_connection);
 
     if (r)
@@ -165,13 +162,8 @@ static void on_server_close(uv_handle_t *handle)
 
 UVH_EXTERN void uvh_server_stop(struct uvh_server *server)
 {
-    struct uvh_server_private *p;
-
-    p = container_of(server, struct uvh_server_private, server);
-
-    p->stop = 1;
-
-    uv_close((uv_handle_t *) &p->stream, &on_server_close);
+    server->stop = 1;
+    uv_close((uv_handle_t *) &server->stream, &on_server_close);
 }
 
 void request_init(struct uvh_request_private *req, struct uvh_server *server)
@@ -222,6 +214,7 @@ void request_init(struct uvh_request_private *req, struct uvh_server *server)
     memset(&req->req, 0, sizeof(req->req));
 
     req->req.server = server;
+    req->req.data = server->userdata;
 
     req->header_state = 0;
 
@@ -239,8 +232,8 @@ void request_init(struct uvh_request_private *req, struct uvh_server *server)
 
 static void on_connection(uv_stream_t *stream, int status)
 {
-    struct uvh_server_private *priv = container_of((uv_tcp_t *) stream,
-        struct uvh_server_private, stream);
+    struct uvh_server *server = container_of((uv_tcp_t *) stream,
+        struct uvh_server, stream);
 
     LOG_DEBUG("%s", __FUNCTION__);
 
@@ -250,20 +243,20 @@ static void on_connection(uv_stream_t *stream, int status)
         return;
     }
 
-    if (priv->stop)
+    if (server->stop)
     {
         LOG_WARNING("on_connection: stop bit set");
         uv_tcp_t *client = calloc(1, sizeof(*client));
-        uv_tcp_init(priv->loop, client);
+        uv_tcp_init(server->loop, client);
         uv_accept(stream, (uv_stream_t *) client);
         uv_close((uv_handle_t *) client, NULL);
         return;
     }
 
     struct uvh_request_private *req = calloc(1, sizeof(*req));
-    request_init(req, &priv->server);
+    request_init(req, server);
 
-    if (uv_tcp_init(priv->loop, &req->stream))
+    if (uv_tcp_init(server->loop, &req->stream))
     {
         LOG_WARNING("failed to initialize uv_tcp_t");
         goto error;
@@ -302,41 +295,35 @@ static uv_buf_t alloc_cb(uv_handle_t *handle, size_t size)
 static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
 {
     struct uvh_request_private *req;
-    struct uvh_server_private *serverp;
+    struct uvh_server *server;
+    int nparsed;
 
     req = (struct uvh_request_private *) stream->data;
-    serverp = container_of(req->req.server, struct uvh_server_private,
-        server);
+    server = req->req.server;
 
     LOG_DEBUG("read_cb: nread: %d, buf.len: %d", (int)nread, (int)buf.len);
+
+    if (nread == 0)
+        goto out;
 
     if (nread < 0)
     {
         uv_err_t err = uv_last_error(stream->loop);
 
-        if (buf.base)
-            free(buf.base);
-
         if (err.code == UV_EOF)
         {
             LOG_DEBUG("EOF");
-            http_parser_execute(&req->parser,
-                &serverp->http_parser_settings, NULL, 0);
+            nread = 0;
         }
-
-        uv_close((uv_handle_t *) stream, &close_cb);
-
-        return;
+        else
+        {
+            uv_close((uv_handle_t *) stream, &close_cb);
+            goto out;
+        }
     }
 
-    if (nread == 0)
-    {
-        free(buf.base);
-        return;
-    }
-
-    int nparsed = http_parser_execute(&req->parser,
-        &serverp->http_parser_settings,
+    nparsed = http_parser_execute(&req->parser,
+        &server->http_parser_settings,
         buf.base, nread);
 
     LOG_DEBUG("nparsed:%d", nparsed);
@@ -346,6 +333,8 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
         LOG_ERROR("http parse error, closing connection");
         uv_close((uv_handle_t *) stream, &close_cb);
     }
+
+out:
 
     free(buf.base);
 }
