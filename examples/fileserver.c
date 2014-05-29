@@ -185,11 +185,11 @@ int request_handler(struct uvh_request *req)
     uv_fs_t stat_req;
     uv_fs_stat(uv_default_loop(), &stat_req, real_path, NULL);
 
-    if (S_ISDIR(stat_req.statbuf.st_mode))
+    if (stat_req.result != -1 && S_ISDIR(stat_req.statbuf.st_mode))
     {
         handle_dir(req, req_path, real_path);
     }
-    else if (S_ISREG(stat_req.statbuf.st_mode))
+    else if (stat_req.result != -1 && S_ISREG(stat_req.statbuf.st_mode))
     {
         handle_file(req, req_path, real_path);
     }
