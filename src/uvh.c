@@ -61,6 +61,18 @@ static int on_message_complete(http_parser *parser);
 
 static void uvh_request_write_chunk(struct uvh_request *req, sds chunk);
 
+static struct http_parser_settings parser_settings =
+{
+    &on_message_begin,
+    &on_url,
+    NULL,
+    &on_header_field,
+    &on_header_value,
+    &on_headers_complete,
+    &on_body,
+    &on_message_complete
+};
+
 struct uvh_request_private;
 struct uvh_connection;
 
@@ -70,7 +82,6 @@ struct uvh_server
     struct sockaddr_storage addr;
     socklen_t addr_len;
     uv_loop_t *loop;
-    struct http_parser_settings http_parser_settings;
     char stop;
     uvh_request_handler_cb request_handler;
     void *userdata;
@@ -129,14 +140,6 @@ UVH_EXTERN struct uvh_server *uvh_server_init(uv_loop_t *loop, void *data,
         goto error;
 
     server->stream.data = server;
-
-    server->http_parser_settings.on_message_begin = on_message_begin;
-    server->http_parser_settings.on_url = on_url;
-    server->http_parser_settings.on_header_field = on_header_field;
-    server->http_parser_settings.on_header_value = on_header_value;
-    server->http_parser_settings.on_headers_complete = on_headers_complete;
-    server->http_parser_settings.on_body = on_body;
-    server->http_parser_settings.on_message_complete = on_message_complete;
 
     return server;
 
@@ -252,7 +255,6 @@ static uv_buf_t alloc_cb(uv_handle_t *handle, size_t size)
 static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
 {
     struct uvh_connection *connection = (struct uvh_connection *) stream;
-    struct uvh_server *server = connection->server;
     size_t nparsed;
 
     LOG_DEBUG("read_cb: nread: %d, buf.len: %d", (int)nread, (int)buf.len);
@@ -277,7 +279,7 @@ static void read_cb(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
     }
 
     nparsed = http_parser_execute(&connection->parser,
-        &server->http_parser_settings,
+        &parser_settings,
         buf.base, nread);
 
     LOG_DEBUG("nparsed:%d", (int) nparsed);
